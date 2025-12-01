@@ -1,0 +1,296 @@
+"""Orchestrator to coordinate crawler execution and data processing"""
+
+from typing import List, Dict, Any
+from datetime import datetime
+import logging
+from sqlalchemy.orm import Session
+
+from app.crawlers.devto import DevToCrawler
+from app.crawlers.hashnode import HashnodeCrawler
+from app.crawlers.medium import MediumCrawler
+from app.crawlers.github import GitHubCrawler
+from app.crawlers.llm_rankings import LLMRankingsCrawler
+from app.crawlers.base import RawArticle
+from app.services.categorizer import CategorizerService
+from app.services.summarizer import SummarizerService
+from app.services.scorer import ScorerService
+from app.services.deduplicator import DeduplicatorService
+from app.models.article import Article, ItemType
+from app.config.database import SessionLocal
+
+logger = logging.getLogger(__name__)
+
+
+class CrawlerOrchestrator:
+    """Orchestrates the crawling, processing, and storage of articles"""
+
+    def __init__(self):
+        self.categorizer = CategorizerService()
+        self.summarizer = SummarizerService()
+        self.scorer = ScorerService()
+
+    async def run_all_crawlers(self) -> Dict[str, Any]:
+        """
+        Run all blog crawlers sequentially
+
+        Returns:
+            Dictionary with crawling statistics
+        """
+        logger.info("Starting all blog crawlers...")
+
+        stats = {
+            "started_at": datetime.utcnow().isoformat(),
+            "sources": {},
+            "total_crawled": 0,
+            "total_saved": 0,
+            "errors": []
+        }
+
+        # Run each crawler
+        sources = [
+            ("devto", DevToCrawler()),
+            ("hashnode", HashnodeCrawler()),
+            ("medium", MediumCrawler())
+        ]
+
+        for source_name, crawler in sources:
+            try:
+                logger.info(f"Running {source_name} crawler...")
+                articles = await crawler.crawl()
+                saved = await self._process_and_save_articles(articles)
+
+                stats["sources"][source_name] = {
+                    "crawled": len(articles),
+                    "saved": saved,
+                    "success": True
+                }
+                stats["total_crawled"] += len(articles)
+                stats["total_saved"] += saved
+
+            except Exception as e:
+                logger.error(f"Error crawling {source_name}: {e}", exc_info=True)
+                stats["sources"][source_name] = {
+                    "crawled": 0,
+                    "saved": 0,
+                    "success": False,
+                    "error": str(e)
+                }
+                stats["errors"].append(f"{source_name}: {str(e)}")
+
+        stats["completed_at"] = datetime.utcnow().isoformat()
+        logger.info(f"All crawlers completed. Total saved: {stats['total_saved']}")
+
+        return stats
+
+    async def run_github_crawler(self) -> Dict[str, Any]:
+        """
+        Run GitHub trending crawler
+
+        Returns:
+            Dictionary with crawling statistics
+        """
+        logger.info("Starting GitHub crawler...")
+
+        stats = {
+            "started_at": datetime.utcnow().isoformat(),
+            "source": "github",
+            "crawled": 0,
+            "saved": 0,
+            "success": False
+        }
+
+        try:
+            crawler = GitHubCrawler()
+            articles = await crawler.crawl()
+            saved = await self._process_and_save_articles(articles)
+
+            stats["crawled"] = len(articles)
+            stats["saved"] = saved
+            stats["success"] = True
+
+        except Exception as e:
+            logger.error(f"Error crawling GitHub: {e}", exc_info=True)
+            stats["error"] = str(e)
+
+        stats["completed_at"] = datetime.utcnow().isoformat()
+        logger.info(f"GitHub crawler completed. Saved: {stats['saved']}")
+
+        return stats
+
+    async def run_llm_crawler(self) -> Dict[str, Any]:
+        """
+        Run LLM rankings crawler
+
+        Note: This handles LLM model data differently than articles
+
+        Returns:
+            Dictionary with crawling statistics
+        """
+        logger.info("Starting LLM rankings crawler...")
+
+        stats = {
+            "started_at": datetime.utcnow().isoformat(),
+            "source": "llm_rankings",
+            "crawled": 0,
+            "saved": 0,
+            "success": False
+        }
+
+        try:
+            crawler = LLMRankingsCrawler()
+            rankings = await crawler.crawl()
+
+            # TODO: Implement LLM model and benchmark score saving
+            # This requires accessing the LLMModel and LLMBenchmarkScore tables
+            # For now, just log the results
+            logger.info(f"Crawled {len(rankings)} LLM rankings")
+
+            stats["crawled"] = len(rankings)
+            stats["saved"] = 0  # Not implemented yet
+            stats["success"] = True
+
+        except Exception as e:
+            logger.error(f"Error crawling LLM rankings: {e}", exc_info=True)
+            stats["error"] = str(e)
+
+        stats["completed_at"] = datetime.utcnow().isoformat()
+
+        return stats
+
+    async def _process_and_save_articles(self, articles: List[RawArticle]) -> int:
+        """
+        Process raw articles through the pipeline and save to database
+
+        Pipeline:
+        1. Deduplicate
+        2. Categorize
+        3. Summarize (Korean)
+        4. Calculate score
+        5. Save to database
+
+        Args:
+            articles: List of RawArticles to process
+
+        Returns:
+            Number of articles saved
+        """
+        if not articles:
+            logger.info("No articles to process")
+            return 0
+
+        logger.info(f"Processing {len(articles)} articles...")
+
+        db = SessionLocal()
+        try:
+            # Step 1: Deduplicate
+            deduplicator = DeduplicatorService(db)
+            unique_articles = deduplicator.filter_duplicates(articles, check_db=True)
+            logger.info(f"After deduplication: {len(unique_articles)} unique articles")
+
+            if not unique_articles:
+                return 0
+
+            # Step 2: Summarize and Categorize (Korean) - LLM does both now
+            # Efficient batching: 25 articles per LLM request, 10 seconds between requests
+            summaries = await self.summarizer.summarize_batch(unique_articles)
+            logger.info("Summarization and categorization completed")
+
+            # Step 3: Filter out failed summarizations and calculate scores
+            scored_articles = []
+            failed_count = 0
+            for article, summary in zip(unique_articles, summaries):
+                if summary is None:
+                    failed_count += 1
+                    logger.warning(f"Skipping article due to failed summarization: {article.title_en}")
+                    continue
+
+                # Get category from LLM response
+                category = summary.get("category", "OTHER")
+                score = self.scorer.calculate_score(article)
+                scored_articles.append((article, category, summary, score))
+
+            logger.info(f"Scoring completed. {failed_count} articles skipped due to failed summarization")
+
+            # Step 5: Save to database
+            saved_count = 0
+            for article, category, summary, score in scored_articles:
+                try:
+                    # Determine item type
+                    item_type = ItemType.REPO if article.source == "github" else ItemType.BLOG
+
+                    # Create Article model
+                    db_article = Article(
+                        item_type=item_type,
+                        source=article.source,
+                        category=category,
+                        summary_ko_title=summary.get("title_ko", article.title_en[:100]),
+                        summary_ko_body=summary.get("summary_ko"),
+                        title_en=article.title_en,
+                        url=article.url,
+                        score=score,
+                        # tags=article.tags,  # NOTE: Tags stored in separate table
+                        stars=article.stars,
+                        comments=article.comments,
+                        upvotes=article.upvotes,
+                        read_time=article.read_time,
+                        language=article.language,
+                        created_at_source=article.published_at,
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+
+                    db.add(db_article)
+                    saved_count += 1
+
+                except Exception as e:
+                    logger.error(f"Failed to save article: {e}")
+                    continue
+
+            # Commit all articles
+            db.commit()
+            logger.info(f"Saved {saved_count} articles to database")
+
+            return saved_count
+
+        except Exception as e:
+            logger.error(f"Error processing articles: {e}", exc_info=True)
+            db.rollback()
+            return 0
+
+        finally:
+            db.close()
+
+    async def run_deduplication(self) -> Dict[str, Any]:
+        """
+        Run deduplication on existing database articles
+
+        Returns:
+            Dictionary with deduplication statistics
+        """
+        logger.info("Starting deduplication...")
+
+        stats = {
+            "started_at": datetime.utcnow().isoformat(),
+            "removed": 0,
+            "success": False
+        }
+
+        db = SessionLocal()
+        try:
+            deduplicator = DeduplicatorService(db)
+            removed_count = deduplicator.mark_existing_duplicates()
+
+            stats["removed"] = removed_count
+            stats["success"] = True
+
+        except Exception as e:
+            logger.error(f"Error during deduplication: {e}", exc_info=True)
+            stats["error"] = str(e)
+
+        finally:
+            db.close()
+
+        stats["completed_at"] = datetime.utcnow().isoformat()
+        logger.info(f"Deduplication completed. Removed: {stats['removed']}")
+
+        return stats
