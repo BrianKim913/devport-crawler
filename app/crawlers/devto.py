@@ -1,0 +1,90 @@
+"""Dev.to crawler using REST API"""
+
+from typing import List
+from datetime import datetime
+import asyncio
+import httpx
+from app.crawlers.base import BaseCrawler, RawArticle
+from app.config.settings import settings
+
+
+class DevToCrawler(BaseCrawler):
+    """Crawler for Dev.to articles using their public REST API"""
+
+    BASE_URL = "https://dev.to/api/articles"
+
+    async def crawl(self) -> List[RawArticle]:
+        """
+        Fetch trending articles from Dev.to
+
+        Returns:
+            List of RawArticle objects
+        """
+        self.log_start()
+        articles = []
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # Fetch top articles from last 7 days
+                response = await client.get(
+                    self.BASE_URL,
+                    params={
+                        "per_page": 50,
+                        "top": 7  # Top articles from last 7 days
+                    },
+                    headers={"User-Agent": self.user_agent}
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                for item in data:
+                    try:
+                        article = self._parse_article(item)
+                        if not self.should_skip(article):
+                            articles.append(article)
+                    except Exception as e:
+                        self.logger.warning(f"Failed to parse article: {e}")
+                        continue
+
+                # Add delay to be polite
+                await asyncio.sleep(self.delay)
+
+        except httpx.HTTPError as e:
+            self.log_error(e)
+        except Exception as e:
+            self.log_error(e)
+
+        self.log_end(len(articles))
+        return articles
+
+    def _parse_article(self, item: dict) -> RawArticle:
+        """Parse Dev.to API response into RawArticle"""
+        published_at = datetime.fromisoformat(
+            item["published_at"].replace("Z", "+00:00")
+        )
+
+        return RawArticle(
+            title_en=item["title"],
+            url=item["url"],
+            source="devto",
+            published_at=published_at,
+            tags=item.get("tag_list", []),
+            content=item.get("description", ""),
+            upvotes=item.get("positive_reactions_count", 0),
+            comments=item.get("comments_count", 0),
+            read_time=f"{item.get('reading_time_minutes', 0)} min read",
+            raw_data=item
+        )
+
+    def should_skip(self, article: RawArticle) -> bool:
+        """
+        Skip articles with low engagement
+
+        Args:
+            article: RawArticle to check
+
+        Returns:
+            True if article should be skipped
+        """
+        min_reactions = settings.MIN_REACTIONS_DEVTO
+        return (article.upvotes or 0) < min_reactions
