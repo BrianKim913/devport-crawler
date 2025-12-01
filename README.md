@@ -1,10 +1,6 @@
-# DevPort Crawler
+# devPort Crawler
 
-개발자 콘텐츠를 수집하고 한국어로 요약하는 서버리스 웹 크롤링 서비스
-
-## 개요
-
-DevPort Crawler는 여러 개발자 커뮤니티에서 트렌딩 콘텐츠를 수집하여 PostgreSQL에 저장하는 FastAPI 기반 크롤러입니다.
+devport.kr 크롤링 서비스
 
 ## 기술 스택
 
