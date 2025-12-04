@@ -17,6 +17,7 @@ from app.services.scorer import ScorerService
 from app.services.deduplicator import DeduplicatorService
 from app.models.article import Article, ItemType
 from app.models.article_tag import ArticleTag
+from app.models.git_repo import GitRepo
 from app.config.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -102,10 +103,10 @@ class CrawlerOrchestrator:
 
         try:
             crawler = GitHubCrawler()
-            articles = await crawler.crawl()
-            saved = await self._process_and_save_articles(articles)
+            repos = await crawler.crawl()
+            saved = await self._process_and_save_repositories(repos)
 
-            stats["crawled"] = len(articles)
+            stats["crawled"] = len(repos)
             stats["saved"] = saved
             stats["success"] = True
 
@@ -250,7 +251,7 @@ class CrawlerOrchestrator:
                                 article_id=db_article.id,
                                 tag=tag
                             )
-                            db.add(tag_entry)
+                            db.merge(tag_entry)  # Use merge to avoid identity map conflicts
 
                     saved_count += 1
 
@@ -266,6 +267,101 @@ class CrawlerOrchestrator:
 
         except Exception as e:
             logger.error(f"Error processing articles: {e}", exc_info=True)
+            db.rollback()
+            return 0
+
+        finally:
+            db.close()
+
+    async def _process_and_save_repositories(self, repos: List[RawArticle]) -> int:
+        """
+        Process GitHub repos and save to git_repos table
+
+        Pipeline:
+        1. Deduplicate by URL
+        2. Summarize (Korean title + description)
+        3. Categorize
+        4. Calculate score
+        5. Save to git_repos table
+
+        Args:
+            repos: List of RawArticles representing GitHub repos
+
+        Returns:
+            Number of repositories saved
+        """
+        if not repos:
+            logger.info("No repositories to process")
+            return 0
+
+        logger.info(f"Processing {len(repos)} repositories...")
+
+        db = SessionLocal()
+        try:
+            # Step 1: Deduplicate by URL
+            existing_urls = {r.url for r in db.query(GitRepo.url).all()}
+            unique_repos = [r for r in repos if r.url not in existing_urls]
+            logger.info(f"After deduplication: {len(unique_repos)} unique repositories")
+
+            if not unique_repos:
+                return 0
+
+            # Step 2: Summarize and Categorize (Korean) - LLM does both
+            summaries = await self.summarizer.summarize_batch(unique_repos)
+            logger.info("Summarization and categorization completed")
+
+            # Step 3: Filter out failed summarizations and calculate scores
+            scored_repos = []
+            failed_count = 0
+            for repo, summary in zip(unique_repos, summaries):
+                if summary is None:
+                    failed_count += 1
+                    logger.warning(f"Skipping repo due to failed summarization: {repo.title_en}")
+                    continue
+
+                # Get category from LLM response
+                category = summary.get("category", "OTHER")
+                score = self.scorer.calculate_score(repo)
+                scored_repos.append((repo, category, summary, score))
+
+            logger.info(f"Scoring completed. {failed_count} repos skipped due to failed summarization")
+
+            # Step 4: Save to git_repos table
+            saved_count = 0
+            for repo, category, summary, score in scored_repos:
+                try:
+                    # Create GitRepo model
+                    db_repo = GitRepo(
+                        full_name=repo.title_en,
+                        url=repo.url,
+                        description=repo.content,
+                        language=repo.language,
+                        stars=repo.stars or 0,
+                        forks=repo.raw_data.get("forks", 0),
+                        stars_this_week=repo.raw_data.get("stars_this_week", 0),
+                        summary_ko_title=summary.get("title_ko", repo.title_en[:100]),
+                        summary_ko_body=summary.get("summary_ko"),
+                        category=category,
+                        score=score,
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+
+                    db.add(db_repo)
+                    saved_count += 1
+
+                except Exception as e:
+                    logger.error(f"Failed to save repository: {e}")
+                    continue
+
+            # Commit all repositories
+            db.commit()
+            logger.info(f"Saved {saved_count} repositories to database")
+
+            return saved_count
+
+        except Exception as e:
+            logger.error(f"Error processing repositories: {e}", exc_info=True)
             db.rollback()
             return 0
 

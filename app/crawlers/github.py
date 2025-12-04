@@ -1,125 +1,122 @@
-"""GitHub trending crawler using GitHub API"""
+"""GitHub trending crawler using BeautifulSoup to scrape trending page"""
 
 from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime
 import asyncio
 import httpx
+from bs4 import BeautifulSoup
 from app.crawlers.base import BaseCrawler, RawArticle
 from app.config.settings import settings
 
 
 class GitHubCrawler(BaseCrawler):
-    """Crawler for GitHub trending repositories using REST API v3"""
+    """Crawler for GitHub trending repositories by scraping trending page"""
 
-    BASE_URL = "https://api.github.com/search/repositories"
+    TRENDING_URL = "https://github.com/trending?since=weekly"
 
     async def crawl(self) -> List[RawArticle]:
         """
-        Fetch trending repositories from GitHub
+        Fetch trending repositories from GitHub trending page
 
         Returns:
             List of RawArticle objects
         """
         self.log_start()
         articles = []
-        seen_repos = set()
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                headers = {"User-Agent": self.user_agent}
-
-                # Add authentication if token is available
-                if settings.GITHUB_TOKEN:
-                    headers["Authorization"] = f"token {settings.GITHUB_TOKEN}"
-
-                # Search 1: Repos created in last 7 days, sorted by stars
-                created_date = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
-                params = {
-                    "q": f"created:>{created_date}",
-                    "sort": "stars",
-                    "order": "desc",
-                    "per_page": 50
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                headers = {
+                    "User-Agent": self.user_agent,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.5"
                 }
 
-                response = await client.get(
-                    self.BASE_URL,
-                    params=params,
-                    headers=headers
-                )
+                self.logger.info(f"Fetching {self.TRENDING_URL}")
+                response = await client.get(self.TRENDING_URL, headers=headers)
                 response.raise_for_status()
-                data = response.json()
 
-                for item in data.get("items", []):
+                soup = BeautifulSoup(response.text, "html.parser")
+
+                # Find all trending repo items
+                repo_elements = soup.find_all("article", class_="Box-row")
+                self.logger.info(f"Found {len(repo_elements)} trending repositories")
+
+                for repo_element in repo_elements:
                     try:
-                        if item["full_name"] not in seen_repos:
-                            article = self._parse_repo(item)
-                            if not self.should_skip(article):
-                                articles.append(article)
-                                seen_repos.add(item["full_name"])
+                        # Extract repo name and URL
+                        repo_link = repo_element.find("h2").find("a")
+                        if not repo_link:
+                            continue
+
+                        repo_path = repo_link.get("href", "")
+                        repo_full_name = repo_path.strip("/")
+                        repo_url = f"https://github.com{repo_path}"
+
+                        # Extract description
+                        desc_element = repo_element.find("p")
+                        description = desc_element.get_text(strip=True) if desc_element else ""
+
+                        # Extract language
+                        lang_element = repo_element.find("span", {"itemprop": "programmingLanguage"})
+                        language = lang_element.get_text(strip=True) if lang_element else None
+
+                        # Extract stars (total)
+                        star_link = repo_element.find("a", href=lambda h: h and "/stargazers" in h)
+                        stars_text = star_link.get_text(strip=True) if star_link else "0"
+                        stars = self._parse_star_count(stars_text)
+
+                        # Extract forks
+                        fork_link = repo_element.find("a", href=lambda h: h and "/forks" in h)
+                        forks_text = fork_link.get_text(strip=True) if fork_link else "0"
+                        forks = self._parse_star_count(forks_text)
+
+                        # Extract stars this week
+                        stars_this_week_span = repo_element.find("span", class_="d-inline-block float-sm-right")
+                        if stars_this_week_span:
+                            stars_this_week_text = stars_this_week_span.get_text(strip=True).split()[0]
+                            stars_this_week = self._parse_star_count(stars_this_week_text)
+                        else:
+                            stars_this_week = 0
+
+                        # Create RawArticle
+                        article = RawArticle(
+                            title_en=repo_full_name,
+                            url=repo_url,
+                            source="github",
+                            published_at=datetime.utcnow(),  # Trending repos don't have a specific date
+                            tags=[language.lower()] if language else [],
+                            content=description,
+                            stars=stars,
+                            language=language,
+                            raw_data={
+                                "forks": forks,
+                                "stars_this_week": stars_this_week
+                            }
+                        )
+
+                        if not self.should_skip(article):
+                            articles.append(article)
+
                     except Exception as e:
-                        self.logger.warning(f"Failed to parse repo: {e}")
+                        self.logger.warning(f"Failed to parse trending repo: {e}")
                         continue
 
-                await asyncio.sleep(self.delay)
-
-                # Search 2: Recently updated repos with high stars
-                updated_date = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
-                params = {
-                    "q": f"stars:>100 pushed:>{updated_date}",
-                    "sort": "stars",
-                    "order": "desc",
-                    "per_page": 30
-                }
-
-                response = await client.get(
-                    self.BASE_URL,
-                    params=params,
-                    headers=headers
-                )
-                response.raise_for_status()
-                data = response.json()
-
-                for item in data.get("items", []):
-                    try:
-                        if item["full_name"] not in seen_repos:
-                            article = self._parse_repo(item)
-                            if not self.should_skip(article):
-                                articles.append(article)
-                                seen_repos.add(item["full_name"])
-                    except Exception as e:
-                        self.logger.warning(f"Failed to parse repo: {e}")
-                        continue
-
-        except httpx.HTTPError as e:
-            self.log_error(e)
         except Exception as e:
             self.log_error(e)
 
         self.log_end(len(articles))
         return articles
 
-    def _parse_repo(self, item: dict) -> RawArticle:
-        """Parse GitHub API response into RawArticle"""
-        created_at = datetime.fromisoformat(
-            item["created_at"].replace("Z", "+00:00")
-        )
-
-        # Use topics as tags, fallback to language
-        tags = item.get("topics", [])
-        if item.get("language"):
-            tags.append(item["language"].lower())
-
-        return RawArticle(
-            title_en=item["full_name"],
-            url=item["html_url"],
-            source="github",
-            published_at=created_at,
-            tags=tags,
-            content=item.get("description", ""),
-            stars=item.get("stargazers_count", 0),
-            language=item.get("language"),
-            raw_data=item
-        )
+    def _parse_star_count(self, text: str) -> int:
+        """Parse star count from text like '1,234' or '1.2k' to integer"""
+        try:
+            text = text.replace(",", "").strip()
+            if "k" in text.lower():
+                return int(float(text.lower().replace("k", "")) * 1000)
+            return int(text)
+        except:
+            return 0
 
     def should_skip(self, article: RawArticle) -> bool:
         """
@@ -131,5 +128,7 @@ class GitHubCrawler(BaseCrawler):
         Returns:
             True if article should be skipped
         """
+        # For trending, we don't filter by stars since they're already curated by GitHub
+        # But we can still apply the minimum if configured
         min_stars = settings.MIN_STARS_GITHUB
         return (article.stars or 0) < min_stars
