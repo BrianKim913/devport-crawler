@@ -11,7 +11,6 @@ from app.crawlers.medium import MediumCrawler
 from app.crawlers.github import GitHubCrawler
 from app.crawlers.llm_rankings import LLMRankingsCrawler
 from app.crawlers.base import RawArticle
-from app.services.categorizer import CategorizerService
 from app.services.summarizer import SummarizerService
 from app.services.scorer import ScorerService
 from app.services.deduplicator import DeduplicatorService
@@ -27,7 +26,6 @@ class CrawlerOrchestrator:
     """Orchestrates the crawling, processing, and storage of articles"""
 
     def __init__(self):
-        self.categorizer = CategorizerService()
         self.summarizer = SummarizerService()
         self.scorer = ScorerService()
 
@@ -165,10 +163,9 @@ class CrawlerOrchestrator:
 
         Pipeline:
         1. Deduplicate
-        2. Categorize
-        3. Summarize (Korean)
-        4. Calculate score
-        5. Save to database
+        2. Summarize (Korean) and Categorize (LLM does both)
+        3. Calculate score
+        4. Save to database
 
         Args:
             articles: List of RawArticles to process
@@ -279,10 +276,9 @@ class CrawlerOrchestrator:
 
         Pipeline:
         1. Deduplicate by URL
-        2. Summarize (Korean title + description)
-        3. Categorize
-        4. Calculate score
-        5. Save to git_repos table
+        2. Summarize (Korean title + description) and Categorize (LLM does both)
+        3. Calculate score
+        4. Save to git_repos table
 
         Args:
             repos: List of RawArticles representing GitHub repos
