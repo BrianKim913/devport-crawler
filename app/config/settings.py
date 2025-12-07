@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # GitHub API
     GITHUB_TOKEN: Optional[str] = None
 
+    # Artificial Analysis API (for LLM rankings)
+    ARTIFICIAL_ANALYSIS_API_KEY: Optional[str] = None
+
     # Crawling settings
     CRAWL_DELAY_SECONDS: int = 2
     MAX_CONCURRENT_REQUESTS: int = 5

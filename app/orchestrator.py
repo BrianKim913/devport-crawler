@@ -119,9 +119,11 @@ class CrawlerOrchestrator:
 
     async def run_llm_crawler(self) -> Dict[str, Any]:
         """
-        Run LLM rankings crawler
+        Run LLM rankings crawler using Artificial Analysis API
 
-        Note: This handles LLM model data differently than articles
+        Fetches LLM model data including pricing, performance, and 18 benchmark scores.
+        Also fetches model creators (providers/organizations).
+        Upserts data into model_creators and llm_models tables (UPDATE existing, INSERT new).
 
         Returns:
             Dictionary with crawling statistics
@@ -131,27 +133,45 @@ class CrawlerOrchestrator:
         stats = {
             "started_at": datetime.utcnow().isoformat(),
             "source": "llm_rankings",
-            "crawled": 0,
-            "saved": 0,
+            "creators_crawled": 0,
+            "models_crawled": 0,
+            "creators_saved": 0,
+            "models_saved": 0,
             "success": False
         }
 
+        db = SessionLocal()
+
         try:
-            crawler = LLMRankingsCrawler()
-            rankings = await crawler.crawl()
+            # Create crawler with database session
+            crawler = LLMRankingsCrawler(db=db)
 
-            # TODO: Implement LLM model and benchmark score saving
-            # This requires accessing the LLMModel and LLMBenchmarkScore tables
-            # For now, just log the results
-            logger.info(f"Crawled {len(rankings)} LLM rankings")
+            # Fetch creators and models from Artificial Analysis API
+            data = await crawler.crawl()
+            creators = data.get("creators", [])
+            models = data.get("models", [])
 
-            stats["crawled"] = len(rankings)
-            stats["saved"] = 0  # Not implemented yet
+            logger.info(f"Fetched {len(creators)} creators and {len(models)} models from API")
+
+            # Save creators and models to database (upsert)
+            save_result = await crawler.save_data(data)
+
+            stats["creators_crawled"] = len(creators)
+            stats["models_crawled"] = len(models)
+            stats["creators_saved"] = save_result.get("creators", 0)
+            stats["models_saved"] = save_result.get("models", 0)
             stats["success"] = True
+
+            logger.info(
+                f"LLM crawler completed: {stats['creators_saved']}/{len(creators)} creators saved, "
+                f"{stats['models_saved']}/{len(models)} models saved"
+            )
 
         except Exception as e:
             logger.error(f"Error crawling LLM rankings: {e}", exc_info=True)
             stats["error"] = str(e)
+        finally:
+            db.close()
 
         stats["completed_at"] = datetime.utcnow().isoformat()
 
