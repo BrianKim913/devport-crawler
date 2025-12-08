@@ -62,17 +62,14 @@ class LLMModel(Base):
     score_livecode_bench = Column(DECIMAL(5, 2), nullable=True)  # Coding
     score_scicode = Column(DECIMAL(5, 2), nullable=True)  # Coding
 
-    # Benchmark Scores - Specialized Skills (6)
+    # Benchmark Scores - Specialized Skills (4)
     score_ifbench = Column(DECIMAL(5, 2), nullable=True)  # Instruction Following
     score_math_500 = Column(DECIMAL(5, 2), nullable=True)  # Math 500
     score_aime = Column(DECIMAL(5, 2), nullable=True)  # AIME (general)
     score_aime_2025 = Column(DECIMAL(5, 2), nullable=True)  # AIME 2025 (specific year)
-    score_crit_pt = Column(DECIMAL(5, 2), nullable=True)  # Physics Reasoning
-    score_mmmu_pro = Column(DECIMAL(5, 2), nullable=True)  # Visual Reasoning
 
-    # Benchmark Scores - Composite Indices (4)
+    # Benchmark Scores - Composite Indices (3)
     score_aa_intelligence_index = Column(DECIMAL(5, 2), nullable=True, index=True)  # Overall Intelligence
-    score_aa_omniscience_index = Column(DECIMAL(5, 2), nullable=True)  # Omniscience Index
     score_aa_coding_index = Column(DECIMAL(5, 2), nullable=True)  # Coding Index
     score_aa_math_index = Column(DECIMAL(5, 2), nullable=True)  # Math Index
 

@@ -207,23 +207,20 @@ class LLMRankingsCrawler(BaseCrawler):
         score_livecode_bench = self._convert_to_percentage(evaluations.get("livecodebench"))
         score_scicode = self._convert_to_percentage(evaluations.get("scicode"))
 
-        # Specialized Skills (6)
+        # Specialized Skills (4)
         score_ifbench = self._convert_to_percentage(evaluations.get("ifbench"))
         score_math_500 = self._convert_to_percentage(evaluations.get("math_500"))
         score_aime = self._convert_to_percentage(evaluations.get("aime"))
         score_aime_2025 = self._convert_to_percentage(evaluations.get("aime_25"))  # API uses "aime_25"
-        score_crit_pt = None  # Not available in API v2
-        score_mmmu_pro = None  # Not available in API v2
 
-        # Composite Indices (4) - these are already in 0-100 format but will be normalized
-        score_aa_intelligence_index = self._convert_to_percentage(
+        # Composite Indices (3) - these are already in 0-100 format, keep as-is
+        score_aa_intelligence_index = self._to_decimal(
             evaluations.get("artificial_analysis_intelligence_index")
         )
-        score_aa_omniscience_index = None  # Not available in API v2
-        score_aa_coding_index = self._convert_to_percentage(
+        score_aa_coding_index = self._to_decimal(
             evaluations.get("artificial_analysis_coding_index")
         )
-        score_aa_math_index = self._convert_to_percentage(
+        score_aa_math_index = self._to_decimal(
             evaluations.get("artificial_analysis_math_index")
         )
 
@@ -265,11 +262,8 @@ class LLMRankingsCrawler(BaseCrawler):
             score_math_500=score_math_500,
             score_aime=score_aime,
             score_aime_2025=score_aime_2025,
-            score_crit_pt=score_crit_pt,
-            score_mmmu_pro=score_mmmu_pro,
             # Composite Indices
             score_aa_intelligence_index=score_aa_intelligence_index,
-            score_aa_omniscience_index=score_aa_omniscience_index,
             score_aa_coding_index=score_aa_coding_index,
             score_aa_math_index=score_aa_math_index,
         )
@@ -447,10 +441,7 @@ class LLMRankingsCrawler(BaseCrawler):
                     existing.score_math_500 = model.score_math_500
                     existing.score_aime = model.score_aime
                     existing.score_aime_2025 = model.score_aime_2025
-                    existing.score_crit_pt = model.score_crit_pt
-                    existing.score_mmmu_pro = model.score_mmmu_pro
                     existing.score_aa_intelligence_index = model.score_aa_intelligence_index
-                    existing.score_aa_omniscience_index = model.score_aa_omniscience_index
                     existing.score_aa_coding_index = model.score_aa_coding_index
                     existing.score_aa_math_index = model.score_aa_math_index
 
