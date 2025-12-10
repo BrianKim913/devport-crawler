@@ -51,6 +51,7 @@ async def root():
             "crawl_devto": "POST /api/crawl/devto",
             "crawl_hashnode": "POST /api/crawl/hashnode",
             "crawl_medium": "POST /api/crawl/medium",
+            "crawl_reddit": "POST /api/crawl/reddit",
             "crawl_github": "POST /api/crawl/github",
             "crawl_llm": "POST /api/crawl/llm-rankings",
             "crawl_all": "POST /api/crawl/all",
@@ -169,6 +170,35 @@ async def crawl_medium(background_tasks: BackgroundTasks):
     }
 
 
+@app.post("/api/crawl/reddit")
+async def crawl_reddit(background_tasks: BackgroundTasks):
+    """Trigger Reddit crawling"""
+    logger.info("Reddit crawl triggered")
+
+    async def run_crawler():
+        from app.crawlers.reddit import RedditCrawler
+
+        try:
+            crawler = RedditCrawler()
+            articles = await crawler.crawl()
+            saved = await orchestrator._process_and_save_articles(articles)
+            last_stats["reddit"] = {
+                "crawled": len(articles),
+                "saved": saved,
+                "source": "reddit"
+            }
+            logger.info(f"Reddit crawler completed: {saved} articles saved")
+        except Exception as e:
+            logger.error(f"Reddit crawler failed: {e}", exc_info=True)
+
+    background_tasks.add_task(run_crawler)
+    return {
+        "status": "started",
+        "source": "reddit",
+        "message": "Reddit crawler started in background"
+    }
+
+
 @app.post("/api/crawl/github")
 async def crawl_github(background_tasks: BackgroundTasks):
     """Trigger GitHub trending crawling"""
@@ -227,7 +257,7 @@ async def crawl_all(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_all)
     return {
         "status": "started",
-        "sources": ["devto", "hashnode", "medium"],
+        "sources": ["devto", "hashnode", "medium", "reddit"],
         "message": "All blog crawlers started in background"
     }
 

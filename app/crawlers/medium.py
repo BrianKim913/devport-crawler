@@ -1,37 +1,37 @@
-"""Medium crawler using RSS feeds"""
+"""Medium crawler using Playwright to fetch RSS feeds"""
 
 from typing import List
 from datetime import datetime
 import asyncio
-import httpx
 import feedparser
+from playwright.async_api import async_playwright
 from app.crawlers.base import BaseCrawler, RawArticle
 from app.config.settings import settings
 
 
 class MediumCrawler(BaseCrawler):
-    """Crawler for Medium articles using RSS feeds"""
+    """Crawler for Medium articles using RSS feeds from popular publications"""
 
-    # Medium RSS feed URL pattern
-    RSS_URL_PATTERN = "https://medium.com/tag/{tag}/feed"
+    # Medium RSS feed URL pattern - Using publication feeds (tag feeds are 404)
+    RSS_URL_PATTERN = "https://medium.com/feed/{publication}"
 
-    # Relevant tags for developer content
-    TAGS = [
-        "programming",
-        "javascript",
-        "python",
-        "devops",
-        "cloud-computing",
-        "software-engineering",
-        "web-development",
-        "machine-learning",
-        "data-science",
-        "backend"
+    # Popular programming publications (verified to have valid RSS feeds)
+    PUBLICATIONS = [
+        "towards-data-science",
+        "better-programming",
+        "javascript-in-plain-english",
+        "python-in-plain-english",
+        "gitconnected",
+        "codex",
+        "aws-in-plain-english",
+        "dev-genius",
+        "stackademic",
+        "the-startup"
     ]
 
     async def crawl(self) -> List[RawArticle]:
         """
-        Fetch articles from Medium RSS feeds
+        Fetch articles from Medium RSS feeds using Playwright
 
         Returns:
             List of RawArticle objects
@@ -41,39 +41,70 @@ class MediumCrawler(BaseCrawler):
         seen_urls = set()
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                for tag in self.TAGS:
+            async with async_playwright() as p:
+                # Launch browser
+                browser = await p.chromium.launch(
+                    headless=settings.PLAYWRIGHT_HEADLESS
+                )
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+                page = await context.new_page()
+
+                for publication in self.PUBLICATIONS:
                     try:
-                        url = self.RSS_URL_PATTERN.format(tag=tag)
-                        response = await client.get(
-                            url,
-                            headers={"User-Agent": self.user_agent}
-                        )
-                        response.raise_for_status()
+                        url = self.RSS_URL_PATTERN.format(publication=publication)
+                        self.logger.info(f"Fetching RSS feed: {url}")
 
-                        # Parse RSS feed
-                        feed = feedparser.parse(response.text)
+                        # Navigate to RSS feed URL with error handling
+                        try:
+                            response = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                        except Exception as nav_error:
+                            self.logger.warning(f"Navigation error for {publication}: {nav_error}")
+                            # Add delay and continue to next publication
+                            await asyncio.sleep(self.delay)
+                            continue
 
-                        for entry in feed.entries[:10]:  # Limit per tag
-                            try:
-                                # Skip duplicates across tags
-                                if entry.link in seen_urls:
-                                    continue
+                        if response and response.status == 200:
+                            # Get page content
+                            content = await page.content()
 
-                                article = self._parse_entry(entry, tag)
-                                if not self.should_skip(article):
-                                    articles.append(article)
-                                    seen_urls.add(entry.link)
-                            except Exception as e:
-                                self.logger.warning(f"Failed to parse entry: {e}")
+                            # Parse RSS feed
+                            feed = feedparser.parse(content)
+
+                            if not feed.entries:
+                                self.logger.warning(f"No entries found in feed for publication {publication}")
+                                await asyncio.sleep(self.delay)
                                 continue
 
-                        # Add delay between tags to be polite
+                            for entry in feed.entries[:10]:  # Limit per publication
+                                try:
+                                    # Skip duplicates across publications
+                                    if entry.link in seen_urls:
+                                        continue
+
+                                    article = self._parse_entry(entry, publication)
+                                    if not self.should_skip(article):
+                                        articles.append(article)
+                                        seen_urls.add(entry.link)
+                                except Exception as e:
+                                    self.logger.warning(f"Failed to parse entry: {e}")
+                                    continue
+
+                            self.logger.info(f"Fetched {len([a for a in articles if publication in a.tags])} articles from publication {publication}")
+                        else:
+                            status = response.status if response else "No response"
+                            self.logger.warning(f"Failed to fetch publication {publication}: HTTP {status}")
+
+                        # Add delay between publications to be polite
                         await asyncio.sleep(self.delay)
 
                     except Exception as e:
-                        self.logger.warning(f"Failed to fetch tag {tag}: {e}")
+                        self.logger.warning(f"Failed to fetch publication {publication}: {e}")
+                        await asyncio.sleep(self.delay)
                         continue
+
+                await browser.close()
 
         except Exception as e:
             self.log_error(e)
@@ -81,13 +112,13 @@ class MediumCrawler(BaseCrawler):
         self.log_end(len(articles))
         return articles
 
-    def _parse_entry(self, entry, tag: str) -> RawArticle:
+    def _parse_entry(self, entry, publication: str) -> RawArticle:
         """Parse RSS entry into RawArticle"""
         # Parse published date
         published_at = datetime(*entry.published_parsed[:6])
 
         # Extract categories/tags
-        tags = [tag]
+        tags = [publication]
         if hasattr(entry, 'tags'):
             tags.extend([t.term for t in entry.tags])
 

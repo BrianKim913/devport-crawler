@@ -8,13 +8,14 @@ from sqlalchemy.orm import Session
 from app.crawlers.devto import DevToCrawler
 from app.crawlers.hashnode import HashnodeCrawler
 from app.crawlers.medium import MediumCrawler
+from app.crawlers.reddit import RedditCrawler
 from app.crawlers.github import GitHubCrawler
 from app.crawlers.llm_rankings import LLMRankingsCrawler
 from app.crawlers.base import RawArticle
 from app.services.summarizer import SummarizerService
 from app.services.scorer import ScorerService
 from app.services.deduplicator import DeduplicatorService
-from app.models.article import Article, ItemType
+from app.models.article import Article, ItemType, Category
 from app.models.article_tag import ArticleTag
 from app.models.git_repo import GitRepo
 from app.config.database import SessionLocal
@@ -50,7 +51,8 @@ class CrawlerOrchestrator:
         sources = [
             ("devto", DevToCrawler()),
             ("hashnode", HashnodeCrawler()),
-            ("medium", MediumCrawler())
+            ("medium", MediumCrawler()),
+            ("reddit", RedditCrawler())
         ]
 
         for source_name, crawler in sources:
@@ -224,7 +226,7 @@ class CrawlerOrchestrator:
                     continue
 
                 # Get category from LLM response
-                category = summary.get("category", "OTHER")
+                category = self._normalize_category(summary.get("category", "OTHER"))
                 score = self.scorer.calculate_score(article)
                 scored_articles.append((article, category, summary, score))
 
@@ -236,6 +238,10 @@ class CrawlerOrchestrator:
                 try:
                     # Determine item type
                     item_type = ItemType.REPO if article.source == "github" else ItemType.BLOG
+
+                    # Prefer tags from LLM; fallback to article tags
+                    tags = summary.get("tags") if summary else None
+                    tags = tags if tags else article.tags
 
                     # Create Article model
                     db_article = Article(
@@ -262,8 +268,8 @@ class CrawlerOrchestrator:
                     db.flush()  # Flush to get the article ID
 
                     # Save tags to article_tags table if article has tags
-                    if article.tags:
-                        for tag in article.tags:
+                    if tags:
+                        for tag in tags:
                             tag_entry = ArticleTag(
                                 article_id=db_article.id,
                                 tag=tag
@@ -274,6 +280,7 @@ class CrawlerOrchestrator:
 
                 except Exception as e:
                     logger.error(f"Failed to save article: {e}")
+                    db.rollback()
                     continue
 
             # Commit all articles and tags
@@ -336,7 +343,7 @@ class CrawlerOrchestrator:
                     continue
 
                 # Get category from LLM response
-                category = summary.get("category", "OTHER")
+                category = self._normalize_category(summary.get("category", "OTHER"))
                 score = self.scorer.calculate_score(repo)
                 scored_repos.append((repo, category, summary, score))
 
@@ -368,6 +375,7 @@ class CrawlerOrchestrator:
 
                 except Exception as e:
                     logger.error(f"Failed to save repository: {e}")
+                    db.rollback()
                     continue
 
             # Commit all repositories
@@ -494,3 +502,11 @@ class CrawlerOrchestrator:
         logger.info(f"Score refresh completed. Updated: {stats['updated']} articles")
 
         return stats
+
+    @staticmethod
+    def _normalize_category(category: str) -> str:
+        """
+        Ensure category matches allowed enum values, otherwise fallback to OTHER.
+        """
+        allowed = {c.value for c in Category}
+        return category if category in allowed else Category.OTHER.value

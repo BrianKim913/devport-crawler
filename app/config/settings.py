@@ -47,7 +47,12 @@ class Settings(BaseSettings):
     # Filtering
     MIN_REACTIONS_DEVTO: int = 10
     MIN_REACTIONS_HASHNODE: int = 5
+    MIN_UPVOTES_REDDIT: int = 100
     MIN_STARS_GITHUB: int = 50
+
+    # Reddit API (optional OAuth; falls back to public if missing)
+    REDDIT_CLIENT_ID: Optional[str] = None
+    REDDIT_CLIENT_SECRET: Optional[str] = None
 
     class Config:
         env_file = ".env"

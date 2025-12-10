@@ -145,13 +145,14 @@ For EACH article, provide a JSON object with:
 4. "category": One of these categories:
    - AI_LLM, DEVOPS_SRE, INFRA_CLOUD, DATABASE, BLOCKCHAIN, SECURITY,
    - DATA_SCIENCE, ARCHITECTURE, MOBILE, FRONTEND, BACKEND, OTHER
+5. "tags": 3-5 short, relevant tags (lowercase, no spaces; use hyphens if needed)
 
 Return a JSON array with {len(articles)} objects in the SAME ORDER as the articles above.
 
 Response format:
 [
-  {{"url": "...", "title_ko": "...", "summary_ko": "...", "category": "AI_LLM"}},
-  {{"url": "...", "title_ko": "...", "summary_ko": "...", "category": "BACKEND"}},
+  {{"url": "...", "title_ko": "...", "summary_ko": "...", "category": "AI_LLM", "tags": ["ai", "ml"]}},
+  {{"url": "...", "title_ko": "...", "summary_ko": "...", "category": "BACKEND", "tags": ["java", "spring"]}},
   ...
 ]"""
         return prompt
@@ -182,6 +183,7 @@ Provide a JSON response with:
    - FRONTEND (React, Vue, Angular, JavaScript, CSS, web frontend)
    - BACKEND (Backend, API, Node.js, Python, Java, server-side)
    - OTHER (anything else that doesn't fit above categories)
+4. "tags": 3-5 short, relevant tags (lowercase, no spaces; use hyphens if needed)
 
 The summary should:
 - Explain what the article is about
@@ -192,7 +194,8 @@ Response format:
 {{
   "title_ko": "...",
   "summary_ko": "...",
-  "category": "AI_LLM"
+  "category": "AI_LLM",
+  "tags": ["tag1", "tag2"]
 }}"""
 
         return prompt
@@ -216,26 +219,40 @@ Response format:
                 logger.error("LLM response is not a JSON array")
                 return [None] * len(articles)
 
-            # Match responses to articles by URL
-            url_to_article = {article.url: article for article in articles}
-            results = []
+            # Match responses to articles by URL; if mismatched, fall back to positional order
+            url_to_index = {article.url: idx for idx, article in enumerate(articles)}
+            results: list[Dict[str, str] | None] = [None] * len(articles)
+            unmatched_items = []
 
             for item in data_array:
-                url = item.get("url", "")
-                if url in url_to_article:
-                    results.append({
+                url = (item.get("url") or "").strip().rstrip("/")
+                tags = self._clean_tags(item.get("tags"))
+                if url in url_to_index:
+                    idx = url_to_index[url]
+                    results[idx] = {
                         "url": url,
                         "title_ko": item.get("title_ko", "")[:100],
                         "summary_ko": item.get("summary_ko", "")[:300],
-                        "category": item.get("category", "OTHER")
-                    })
+                        "category": item.get("category", "OTHER"),
+                        "tags": tags,
+                    }
                 else:
-                    logger.warning(f"Could not match URL from LLM response: {url}")
-                    results.append(None)
+                    item["__clean_tags__"] = tags
+                    unmatched_items.append(item)
 
-            # Fill in None for any missing articles
-            while len(results) < len(articles):
-                results.append(None)
+            # Fill remaining slots in order for unmatched items (LLM sometimes tweaks URLs)
+            remaining_indices = [i for i, val in enumerate(results) if val is None]
+            for item, idx in zip(unmatched_items, remaining_indices):
+                url = (item.get("url") or "").strip()
+                tags = item.get("__clean_tags__") or self._clean_tags(item.get("tags"))
+                logger.warning(f"Could not match URL from LLM response, assigning by order: {url}")
+                results[idx] = {
+                    "url": url,
+                    "title_ko": item.get("title_ko", "")[:100],
+                    "summary_ko": item.get("summary_ko", "")[:300],
+                    "category": item.get("category", "OTHER"),
+                    "tags": tags,
+                }
 
             return results
 
@@ -261,7 +278,8 @@ Response format:
             return {
                 "title_ko": data.get("title_ko", "")[:100],
                 "summary_ko": data.get("summary_ko", "")[:300],
-                "category": data.get("category", "OTHER")
+                "category": data.get("category", "OTHER"),
+                "tags": self._clean_tags(data.get("tags"))
             }
         except json.JSONDecodeError:
             logger.error(f"Failed to parse LLM response as JSON: {content}")
@@ -347,3 +365,27 @@ Response format:
                 await asyncio.sleep(delay)
 
         return summaries
+
+    @staticmethod
+    def _clean_tags(tags) -> list[str]:
+        """Normalize tags list to <=5 lowercase strings without spaces."""
+        if not tags:
+            return []
+        if isinstance(tags, str):
+            tags = [tags]
+        cleaned = []
+        for t in tags:
+            if not isinstance(t, str):
+                continue
+            tag = t.strip().lower().replace(" ", "-")
+            if tag:
+                cleaned.append(tag)
+        # Deduplicate while preserving order
+        seen = set()
+        deduped = []
+        for tag in cleaned:
+            if tag in seen:
+                continue
+            seen.add(tag)
+            deduped.append(tag)
+        return deduped[:5]
