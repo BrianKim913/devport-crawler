@@ -51,6 +51,9 @@ class Article(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
+    # External ID (unique identifier from source or generated UUID)
+    external_id = Column(String(100), unique=True, nullable=False, index=True)
+
     # Core fields
     item_type = Column(String(20), nullable=False)  # VARCHAR in DB, not enum
     source = Column(String(20), nullable=False, index=True)  # VARCHAR in DB, not enum

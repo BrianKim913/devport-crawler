@@ -56,7 +56,7 @@ async def root():
             "crawl_llm": "POST /api/crawl/llm-rankings",
             "crawl_all": "POST /api/crawl/all",
             "deduplicate": "POST /api/deduplicate",
-            "refresh_scores": "POST /api/refresh-scores?days=30"
+            "refresh_scores": "POST /api/refresh-scores (HTTP) or {\"source\": \"refresh_scores\"} (Lambda)"
         }
     }
 
@@ -88,19 +88,10 @@ async def crawl_devto(background_tasks: BackgroundTasks):
     logger.info("Dev.to crawl triggered")
 
     async def run_crawler():
-        from app.crawlers.devto import DevToCrawler
-        from app.crawlers.base import RawArticle
-
         try:
-            crawler = DevToCrawler()
-            articles = await crawler.crawl()
-            saved = await orchestrator._process_and_save_articles(articles)
-            last_stats["devto"] = {
-                "crawled": len(articles),
-                "saved": saved,
-                "source": "devto"
-            }
-            logger.info(f"Dev.to crawler completed: {saved} articles saved")
+            stats = await orchestrator.run_devto_crawler()
+            last_stats["devto"] = stats
+            logger.info(f"Dev.to crawler completed: {stats.get('saved', 0)} articles saved")
         except Exception as e:
             logger.error(f"Dev.to crawler failed: {e}", exc_info=True)
 
@@ -118,18 +109,10 @@ async def crawl_hashnode(background_tasks: BackgroundTasks):
     logger.info("Hashnode crawl triggered")
 
     async def run_crawler():
-        from app.crawlers.hashnode import HashnodeCrawler
-
         try:
-            crawler = HashnodeCrawler()
-            articles = await crawler.crawl()
-            saved = await orchestrator._process_and_save_articles(articles)
-            last_stats["hashnode"] = {
-                "crawled": len(articles),
-                "saved": saved,
-                "source": "hashnode"
-            }
-            logger.info(f"Hashnode crawler completed: {saved} articles saved")
+            stats = await orchestrator.run_hashnode_crawler()
+            last_stats["hashnode"] = stats
+            logger.info(f"Hashnode crawler completed: {stats.get('saved', 0)} articles saved")
         except Exception as e:
             logger.error(f"Hashnode crawler failed: {e}", exc_info=True)
 
@@ -147,18 +130,10 @@ async def crawl_medium(background_tasks: BackgroundTasks):
     logger.info("Medium crawl triggered")
 
     async def run_crawler():
-        from app.crawlers.medium import MediumCrawler
-
         try:
-            crawler = MediumCrawler()
-            articles = await crawler.crawl()
-            saved = await orchestrator._process_and_save_articles(articles)
-            last_stats["medium"] = {
-                "crawled": len(articles),
-                "saved": saved,
-                "source": "medium"
-            }
-            logger.info(f"Medium crawler completed: {saved} articles saved")
+            stats = await orchestrator.run_medium_crawler()
+            last_stats["medium"] = stats
+            logger.info(f"Medium crawler completed: {stats.get('saved', 0)} articles saved")
         except Exception as e:
             logger.error(f"Medium crawler failed: {e}", exc_info=True)
 
@@ -176,18 +151,10 @@ async def crawl_reddit(background_tasks: BackgroundTasks):
     logger.info("Reddit crawl triggered")
 
     async def run_crawler():
-        from app.crawlers.reddit import RedditCrawler
-
         try:
-            crawler = RedditCrawler()
-            articles = await crawler.crawl()
-            saved = await orchestrator._process_and_save_articles(articles)
-            last_stats["reddit"] = {
-                "crawled": len(articles),
-                "saved": saved,
-                "source": "reddit"
-            }
-            logger.info(f"Reddit crawler completed: {saved} articles saved")
+            stats = await orchestrator.run_reddit_crawler()
+            last_stats["reddit"] = stats
+            logger.info(f"Reddit crawler completed: {stats.get('saved', 0)} articles saved")
         except Exception as e:
             logger.error(f"Reddit crawler failed: {e}", exc_info=True)
 
@@ -283,17 +250,19 @@ async def deduplicate(background_tasks: BackgroundTasks):
 
 
 @app.post("/api/refresh-scores")
-async def refresh_scores(background_tasks: BackgroundTasks, days: int = 30):
+async def refresh_scores(background_tasks: BackgroundTasks, days: int = None):
     """
-    Recalculate scores for articles from last N days
+    Recalculate scores for articles within the scoring window
 
     This updates scores to reflect time decay as articles age.
     Should be run daily via cron/scheduler.
 
     Query params:
-        days: Number of days back to refresh (default: 30)
+        days: Number of days back to refresh (default: uses SCORE_MAX_AGE_DAYS setting, typically 14)
     """
-    logger.info(f"Score refresh triggered for last {days} days")
+    from app.config.settings import settings
+    effective_days = days if days is not None else getattr(settings, 'SCORE_MAX_AGE_DAYS', 14)
+    logger.info(f"Score refresh triggered for last {effective_days} days")
 
     async def run_refresh():
         try:
@@ -317,7 +286,8 @@ def lambda_handler(event: Dict[str, Any], context: Any):
 
     Expected event format:
     {
-        "source": "github" | "all_blogs" | "llm_rankings"
+        "source": "github" | "all_blogs" | "llm_rankings" | "refresh_scores",
+        "days": 30  # Optional: for refresh_scores only
     }
     """
     logger.info(f"Lambda invoked with event: {event}")
@@ -351,6 +321,16 @@ def lambda_handler(event: Dict[str, Any], context: Any):
                 return {
                     "statusCode": 200,
                     "body": f"Crawled LLM rankings successfully"
+                }
+
+            elif source == "refresh_scores":
+                # Recalculate scores for articles from last N days (default: 30)
+                days = event.get("days", 30)
+                stats = asyncio.run(orchestrator.refresh_scores(days=days))
+                logger.info(f"Score refresh completed: {stats}")
+                return {
+                    "statusCode": 200,
+                    "body": f"Refreshed {stats.get('updated', 0)} article scores"
                 }
 
             else:

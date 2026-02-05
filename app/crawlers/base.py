@@ -21,6 +21,7 @@ class RawArticle:
         url: str,
         source: str,
         published_at: datetime,
+        external_id: Optional[str] = None,
         tags: Optional[List[str]] = None,
         content: Optional[str] = None,
         stars: Optional[int] = None,
@@ -34,6 +35,7 @@ class RawArticle:
         self.url = url
         self.source = source
         self.published_at = published_at
+        self.external_id = external_id  # Optional: source's actual ID
         self.tags = tags or []
         self.content = content
         self.stars = stars

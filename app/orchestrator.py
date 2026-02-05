@@ -3,6 +3,7 @@
 from typing import List, Dict, Any
 from datetime import datetime
 import logging
+import uuid
 from sqlalchemy.orm import Session
 
 from app.crawlers.devto import DevToCrawler
@@ -179,6 +180,146 @@ class CrawlerOrchestrator:
 
         return stats
 
+    async def run_devto_crawler(self) -> Dict[str, Any]:
+        """
+        Run Dev.to crawler
+
+        Returns:
+            Dictionary with crawling statistics
+        """
+        logger.info("Starting Dev.to crawler...")
+
+        stats = {
+            "started_at": datetime.utcnow().isoformat(),
+            "source": "devto",
+            "crawled": 0,
+            "saved": 0,
+            "success": False
+        }
+
+        try:
+            crawler = DevToCrawler()
+            articles = await crawler.crawl()
+            saved = await self._process_and_save_articles(articles)
+
+            stats["crawled"] = len(articles)
+            stats["saved"] = saved
+            stats["success"] = True
+
+        except Exception as e:
+            logger.error(f"Error crawling Dev.to: {e}", exc_info=True)
+            stats["error"] = str(e)
+
+        stats["completed_at"] = datetime.utcnow().isoformat()
+        logger.info(f"Dev.to crawler completed. Saved: {stats['saved']}")
+
+        return stats
+
+    async def run_hashnode_crawler(self) -> Dict[str, Any]:
+        """
+        Run Hashnode crawler
+
+        Returns:
+            Dictionary with crawling statistics
+        """
+        logger.info("Starting Hashnode crawler...")
+
+        stats = {
+            "started_at": datetime.utcnow().isoformat(),
+            "source": "hashnode",
+            "crawled": 0,
+            "saved": 0,
+            "success": False
+        }
+
+        try:
+            crawler = HashnodeCrawler()
+            articles = await crawler.crawl()
+            saved = await self._process_and_save_articles(articles)
+
+            stats["crawled"] = len(articles)
+            stats["saved"] = saved
+            stats["success"] = True
+
+        except Exception as e:
+            logger.error(f"Error crawling Hashnode: {e}", exc_info=True)
+            stats["error"] = str(e)
+
+        stats["completed_at"] = datetime.utcnow().isoformat()
+        logger.info(f"Hashnode crawler completed. Saved: {stats['saved']}")
+
+        return stats
+
+    async def run_medium_crawler(self) -> Dict[str, Any]:
+        """
+        Run Medium crawler
+
+        Returns:
+            Dictionary with crawling statistics
+        """
+        logger.info("Starting Medium crawler...")
+
+        stats = {
+            "started_at": datetime.utcnow().isoformat(),
+            "source": "medium",
+            "crawled": 0,
+            "saved": 0,
+            "success": False
+        }
+
+        try:
+            crawler = MediumCrawler()
+            articles = await crawler.crawl()
+            saved = await self._process_and_save_articles(articles)
+
+            stats["crawled"] = len(articles)
+            stats["saved"] = saved
+            stats["success"] = True
+
+        except Exception as e:
+            logger.error(f"Error crawling Medium: {e}", exc_info=True)
+            stats["error"] = str(e)
+
+        stats["completed_at"] = datetime.utcnow().isoformat()
+        logger.info(f"Medium crawler completed. Saved: {stats['saved']}")
+
+        return stats
+
+    async def run_reddit_crawler(self) -> Dict[str, Any]:
+        """
+        Run Reddit crawler
+
+        Returns:
+            Dictionary with crawling statistics
+        """
+        logger.info("Starting Reddit crawler...")
+
+        stats = {
+            "started_at": datetime.utcnow().isoformat(),
+            "source": "reddit",
+            "crawled": 0,
+            "saved": 0,
+            "success": False
+        }
+
+        try:
+            crawler = RedditCrawler()
+            articles = await crawler.crawl()
+            saved = await self._process_and_save_articles(articles)
+
+            stats["crawled"] = len(articles)
+            stats["saved"] = saved
+            stats["success"] = True
+
+        except Exception as e:
+            logger.error(f"Error crawling Reddit: {e}", exc_info=True)
+            stats["error"] = str(e)
+
+        stats["completed_at"] = datetime.utcnow().isoformat()
+        logger.info(f"Reddit crawler completed. Saved: {stats['saved']}")
+
+        return stats
+
     async def _process_and_save_articles(self, articles: List[RawArticle]) -> int:
         """
         Process raw articles through the pipeline and save to database
@@ -243,8 +384,13 @@ class CrawlerOrchestrator:
                     tags = summary.get("tags") if summary else None
                     tags = tags if tags else article.tags
 
+                    # Always generate a fresh UUID for external_id (matches Java backend behavior)
+                    # Equivalent to Java's UUID.randomUUID().toString()
+                    external_id = str(uuid.uuid4())
+
                     # Create Article model
                     db_article = Article(
+                        external_id=external_id,
                         item_type=item_type,
                         source=article.source,
                         category=category,
@@ -427,37 +573,45 @@ class CrawlerOrchestrator:
 
         return stats
 
-    async def refresh_scores(self, days: int = 30) -> Dict[str, Any]:
+    async def refresh_scores(self, days: int = None) -> Dict[str, Any]:
         """
-        Recalculate scores for articles from last N days
+        Recalculate scores for articles within the scoring window
 
         This updates scores to reflect time decay as articles age.
+        Only processes articles within the max age threshold since older
+        articles will always have score=0 anyway.
 
         Args:
-            days: Number of days back to refresh scores (default: 30)
+            days: Number of days back to refresh scores (default: use SCORE_MAX_AGE_DAYS from settings)
 
         Returns:
             Dictionary with refresh statistics
         """
+        from app.config.settings import settings
+        from datetime import timedelta
+
+        # Use SCORE_MAX_AGE_DAYS if days not specified (more efficient)
+        if days is None:
+            days = getattr(settings, 'SCORE_MAX_AGE_DAYS', 14)
+
         logger.info(f"Starting score refresh for articles from last {days} days...")
 
         stats = {
             "started_at": datetime.utcnow().isoformat(),
             "updated": 0,
+            "zeroed": 0,
             "success": False
         }
 
         db = SessionLocal()
         try:
-            from datetime import timedelta
-
-            # Get articles from last N days
+            # Get articles from last N days (only articles within scoring window)
             cutoff = datetime.utcnow() - timedelta(days=days)
             articles = db.query(Article).filter(
                 Article.created_at_source >= cutoff
             ).all()
 
-            logger.info(f"Found {len(articles)} articles to refresh")
+            logger.info(f"Found {len(articles)} articles to refresh (within {days}-day window)")
 
             # Recalculate each score
             for article in articles:
@@ -478,9 +632,14 @@ class CrawlerOrchestrator:
                     )
 
                     # Recalculate score with current time decay
+                    old_score = article.score
                     new_score = self.scorer.calculate_score(raw_article)
                     article.score = new_score
                     stats["updated"] += 1
+
+                    # Track articles that got zeroed out
+                    if new_score == 0 and old_score > 0:
+                        stats["zeroed"] += 1
 
                 except Exception as e:
                     logger.warning(f"Failed to refresh score for article {article.id}: {e}")
@@ -499,7 +658,10 @@ class CrawlerOrchestrator:
             db.close()
 
         stats["completed_at"] = datetime.utcnow().isoformat()
-        logger.info(f"Score refresh completed. Updated: {stats['updated']} articles")
+        logger.info(
+            f"Score refresh completed. Updated: {stats['updated']} articles, "
+            f"Zeroed out: {stats['zeroed']} articles (14+ days old)"
+        )
 
         return stats
 
