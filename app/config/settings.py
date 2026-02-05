@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     BLOG_SOURCE_WEIGHT: float = 1.0
     TIME_DECAY_DAYS: int = 7
 
+    # Scoring - Time Decay (Exponential Decay System)
+    SCORE_PLATEAU_DAYS: int = 2  # Days before score decay starts (fresh content plateau)
+    SCORE_HALF_LIFE_DAYS: float = 4.0  # Exponential decay rate (days for score to halve)
+    SCORE_MAX_AGE_DAYS: int = 14  # Articles older than this get zero score (hard cutoff)
+
     # Filtering
     MIN_REACTIONS_DEVTO: int = 10
     MIN_REACTIONS_HASHNODE: int = 5
