@@ -390,8 +390,11 @@ class LLMRankingsCrawler(BaseCrawler):
                     f"release_date={model.release_date}, model_creator_id={model.model_creator_id}"
                 )
 
+                # Check for existing model by EITHER model_id OR external_id
+                # (API might change one or the other over time)
                 existing = self.db.query(LLMModel).filter(
-                    LLMModel.model_id == model.model_id
+                    (LLMModel.model_id == model.model_id) |
+                    (LLMModel.external_id == model.external_id)
                 ).first()
 
                 if existing:
