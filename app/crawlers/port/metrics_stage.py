@@ -9,6 +9,7 @@ from typing import Any, Sequence
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.config.settings import settings
+from app.crawlers.port.client import sanitize_log_extra
 from app.models.project import Project
 from app.models.project_metrics_daily import ProjectMetricsDaily
 from app.services.port.project_mapper import map_metrics_to_daily_row
@@ -49,7 +50,10 @@ class MetricsStage:
                     updated += 1
             except Exception as exc:
                 failed += 1
-                logger.warning("Skipping metrics payload due to ingestion error", extra={"error": str(exc)})
+                logger.warning(
+                    "Skipping metrics payload due to ingestion error",
+                    extra=sanitize_log_extra(error=str(exc), stage="metrics", payload=payload),
+                )
 
         self._upsert_metrics_rows(db, rows)
 

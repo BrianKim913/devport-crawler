@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from dateutil import parser as date_parser
 
+from app.crawlers.port.client import sanitize_log_extra, sanitize_for_log
 from app.crawlers.port.contracts import FetchResult, FetchState
 from app.models.project import Project
 from app.models.project_event import ProjectEvent
@@ -74,7 +75,7 @@ class EventsStage:
             self._upsert_events(db, project.id, rows)
             return EventIngestionResult("releases", len(rows), False, failure_reasons)
         if releases.is_failed:
-            failure_reasons.append(f"releases: {releases.error or 'unknown'}")
+            failure_reasons.append(sanitize_for_log(f"releases: {releases.error or 'unknown'}", key="error"))
 
         tags = await self._github_client.list_tags(owner, repo)
         if tags.is_ok and tags.data:
@@ -82,7 +83,7 @@ class EventsStage:
             self._upsert_events(db, project.id, rows)
             return EventIngestionResult("tags", len(rows), False, failure_reasons)
         if tags.is_failed:
-            failure_reasons.append(f"tags: {tags.error or 'unknown'}")
+            failure_reasons.append(sanitize_for_log(f"tags: {tags.error or 'unknown'}", key="error"))
 
         changelog, changelog_failures = await self._fetch_changelog(owner, repo)
         failure_reasons.extend(changelog_failures)
@@ -94,7 +95,7 @@ class EventsStage:
         if releases.is_failed and tags.is_failed and changelog_failures:
             logger.warning(
                 "Skipping project event update because all sources failed",
-                extra={"project": project.full_name, "reasons": failure_reasons},
+                extra=sanitize_log_extra(project=project.full_name, reasons=failure_reasons, stage="events"),
             )
             return EventIngestionResult(None, 0, True, failure_reasons)
 
@@ -112,7 +113,7 @@ class EventsStage:
             if response.state == FetchState.OK and response.data:
                 return response.data, failures
             if response.is_failed and response.status_code not in (404,):
-                failures.append(f"changelog({path}): {response.error or 'unknown'}")
+                failures.append(sanitize_for_log(f"changelog({path}): {response.error or 'unknown'}", key="error"))
         return None, failures
 
     def _normalize_release_rows(self, project_id: int, releases: list[dict[str, Any]]) -> list[EventRow]:

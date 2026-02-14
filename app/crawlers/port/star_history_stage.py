@@ -10,6 +10,7 @@ from typing import Any, Optional
 from dateutil import parser as date_parser
 
 from app.config.settings import settings
+from app.crawlers.port.client import sanitize_log_extra
 from app.crawlers.port.contracts import FetchState
 from app.models.project import Project
 from app.models.project_star_history import ProjectStarHistory
@@ -79,7 +80,12 @@ class StarHistoryStage:
                 failed = True
                 logger.warning(
                     "Failed to fetch stargazer page",
-                    extra={"project": project.full_name, "page": current_page, "error": response.error},
+                    extra=sanitize_log_extra(
+                        project=project.full_name,
+                        page=current_page,
+                        error=response.error,
+                        stage="star_history",
+                    ),
                 )
                 break
 

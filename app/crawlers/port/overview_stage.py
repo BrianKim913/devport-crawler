@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 from typing import Any, Protocol
 
+from app.crawlers.port.client import sanitize_log_extra
 from app.models.project_overview import ProjectOverview
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -82,8 +86,17 @@ class ProjectOverviewStage:
                     stats.updated += 1
                 else:
                     stats.failed += 1
-            except Exception:
+            except Exception as exc:
                 stats.failed += 1
+                logger.warning(
+                    "Overview stage failed for project",
+                    extra=sanitize_log_extra(
+                        stage="overviews",
+                        project_id=project.project_id,
+                        repo=f"{project.owner}/{project.repo}",
+                        error=str(exc),
+                    ),
+                )
         return stats
 
     async def _process_project(self, project: OverviewProjectRef) -> bool | None:

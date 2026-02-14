@@ -6,6 +6,7 @@ import logging
 from typing import Any, Sequence
 
 from app.models.project import Project
+from app.crawlers.port.client import sanitize_log_extra
 from app.services.port.project_mapper import build_project_external_id, map_repo_to_project_row
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,14 @@ class ProjectsStage:
                     updated += 1
             except Exception as exc:
                 failed += 1
-                logger.warning("Skipping repository due to ingestion error", extra={"error": str(exc)})
+                logger.warning(
+                    "Skipping repository due to ingestion error",
+                    extra=sanitize_log_extra(
+                        error=str(exc),
+                        external_id=repo_payload.get("full_name") or repo_payload.get("id") or "unknown",
+                        stage="projects",
+                    ),
+                )
 
         return {
             "input": len(repositories),
