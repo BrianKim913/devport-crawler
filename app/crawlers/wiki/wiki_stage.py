@@ -93,7 +93,7 @@ class WikiStage:
                 db.rollback()
                 stats["failed"] += 1
                 logger.warning(
-                    "Wiki generation failed",
+                    f"Wiki generation failed for {project.full_name}: {type(exc).__name__}: {str(exc)}",
                     extra=sanitize_log_extra(project=project.full_name, error=str(exc)),
                 )
 
@@ -142,9 +142,8 @@ class WikiStage:
 
         # Calculate hidden sections based on readiness
         hidden = calculate_hidden_sections(snapshot)
-        snapshot = WikiSnapshot(
-            **{**asdict(snapshot), "hidden_sections": hidden}
-        )
+        from dataclasses import replace
+        snapshot = replace(snapshot, hidden_sections=hidden)
 
         return snapshot
 
