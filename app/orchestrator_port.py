@@ -22,6 +22,7 @@ from app.crawlers.port.overview_stage import (
 )
 from app.crawlers.port.projects_stage import ProjectsStage
 from app.crawlers.port.star_history_stage import StarHistoryCheckpoint, StarHistoryStage
+from app.crawlers.wiki.wiki_stage import WikiStage
 from app.models.port import Port
 from app.models.project import Project
 from app.services.port.candidate_selector import CandidateSelector, RepoCandidate
@@ -36,15 +37,46 @@ STAGE_EVENTS = "events"
 STAGE_STAR_HISTORY = "star_history"
 STAGE_METRICS = "metrics"
 STAGE_OVERVIEWS = "overviews"
+STAGE_WIKI = "wiki"
 
-ALL_STAGES = (STAGE_PROJECTS, STAGE_EVENTS, STAGE_STAR_HISTORY, STAGE_METRICS, STAGE_OVERVIEWS)
-DAILY_DEFAULT_STAGES = (STAGE_EVENTS, STAGE_METRICS, STAGE_OVERVIEWS)
+ALL_STAGES = (STAGE_PROJECTS, STAGE_EVENTS, STAGE_STAR_HISTORY, STAGE_METRICS, STAGE_OVERVIEWS, STAGE_WIKI)
+DAILY_DEFAULT_STAGES = (STAGE_EVENTS, STAGE_METRICS, STAGE_OVERVIEWS, STAGE_WIKI)
 DEFAULT_SEARCH_RESULTS_PER_PORT = 50
 
 OVERVIEW_SYSTEM_MESSAGE = (
-    "You write neutral, factual Korean technical summaries for software projects. "
-    "Never use promotional language. Return valid JSON only."
+    "You write concise, factual Korean summaries for open-source software projects. "
+    "Do not use marketing language or speculation. Return strict JSON only."
 )
+
+OVERVIEW_JSON_SCHEMA = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "port_overview_summary",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "highlights": {"type": "array", "items": {"type": "string"}},
+                "quickstart": {"type": ["string", "null"]},
+                "links": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {"type": "string"},
+                            "url": {"type": "string"},
+                        },
+                        "required": ["label", "url"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["summary", "highlights", "quickstart", "links"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 
 class PortCrawlerOrchestrator:
@@ -184,6 +216,7 @@ class PortCrawlerOrchestrator:
             STAGE_STAR_HISTORY: self.run_star_history_stage,
             STAGE_METRICS: self.run_metrics_stage,
             STAGE_OVERVIEWS: self.run_overview_stage,
+            STAGE_WIKI: self.run_wiki_stage,
         }
         return mapping.get(stage_name)
 
@@ -501,6 +534,33 @@ class PortCrawlerOrchestrator:
         finally:
             db.close()
 
+    async def run_wiki_stage(
+        self,
+        *,
+        project_ids: Sequence[int] | None = None,
+        checkpoints: dict[str, dict[str, Any]] | None = None,
+        mode: str = "daily",
+        requested_metrics_days: int = 3650,
+    ) -> dict[str, Any]:
+        """Execute wiki snapshot generation stage."""
+        del checkpoints, mode, requested_metrics_days
+        db = self._session_factory()
+        projects = self._load_projects(db, project_ids=project_ids)
+        if not projects:
+            db.close()
+            return {"success": True, "skipped": True, "stats": {"reason": "No tracked projects found"}}
+
+        try:
+            async with self._github_client_factory() as client:
+                stage = WikiStage(github_client=client)
+                result = await stage.run(db=db, projects=projects)
+            return result
+        except Exception as exc:
+            db.rollback()
+            return {"success": False, "error": str(exc), "stats": {}}
+        finally:
+            db.close()
+
     @staticmethod
     async def _fallback_overview_llm_call(_: str) -> dict[str, Any]:
         return {
@@ -787,16 +847,28 @@ class PortCrawlerOrchestrator:
         if self._openai_client is None:
             self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-        try:
-            response = await self._openai_client.chat.completions.create(
-                model="gpt-5-nano",
-                messages=[
-                    {"role": "system", "content": OVERVIEW_SYSTEM_MESSAGE},
-                    {"role": "user", "content": prompt},
-                ],
-                max_completion_tokens=min(int(getattr(settings, "LLM_MAX_TOKENS", 6000)), 8000),
-                reasoning_effort="low",
-            )
-            return (response.choices[0].message.content or "").strip()
-        except Exception as exc:
-            raise ValueError(f"overview llm call failed: {exc}") from exc
+        model_order = ["gpt-5-mini", "gpt-5-nano"]
+        max_tokens = min(int(getattr(settings, "LLM_MAX_TOKENS", 6000)), 8000)
+
+        last_error: Exception | None = None
+        for model in model_order:
+            try:
+                response = await self._openai_client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": OVERVIEW_SYSTEM_MESSAGE},
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_completion_tokens=max_tokens,
+                    reasoning_effort="low",
+                    response_format=OVERVIEW_JSON_SCHEMA,
+                )
+                return (response.choices[0].message.content or "").strip()
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "Overview LLM model call failed; trying fallback model",
+                    extra=sanitize_log_extra(stage=STAGE_OVERVIEWS, model=model, error=str(exc)),
+                )
+
+        raise ValueError(f"overview llm call failed: {last_error}")
