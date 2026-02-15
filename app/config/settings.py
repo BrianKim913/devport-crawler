@@ -111,6 +111,13 @@ class Settings(BaseSettings):
     # Discord webhook for failed content fetch notifications
     DISCORD_WEBHOOK_URL: Optional[str] = None
 
+    # Wiki data-readiness gates (Phase 5)
+    WIKI_MIN_STARS_THRESHOLD: int = 100  # Top-star minimum for wiki eligibility
+    WIKI_MIN_12MO_EVENTS: int = 5  # Minimum repository events in last 12 months
+    WIKI_MIN_RELEASES_OR_TAGS: int = 3  # Minimum releases + tags for timeline
+    WIKI_MIN_README_CHARS: int = 500  # Minimum aggregated README/docs length
+    WIKI_HIDE_INCOMPLETE_SECTIONS: bool = True  # Hide sections failing readiness gates
+
     class Config:
         env_file = ".env"
         case_sensitive = True
