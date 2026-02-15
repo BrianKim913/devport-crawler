@@ -1,0 +1,316 @@
+{
+  "crawler": "github",
+  "fetched_at": "2026-02-10T11:50:14.173439",
+  "elapsed_seconds": 1.37,
+  "total_articles": 17,
+  "articles_with_content": 17,
+  "avg_content_length": 81,
+  "articles": [
+    {
+      "title_en": "KeygraphHQ/shannon",
+      "url": "https://github.com/KeygraphHQ/shannon",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.170814",
+      "external_id": null,
+      "tags": [
+        "typescript"
+      ],
+      "content_length": 158,
+      "content_preview": "Fully autonomous AI hacker to find actual exploits in your web apps. Shannon has achieved a 96.15% success rate on the hint-free, source-aware XBOW Benchmark.",
+      "content_full": "Fully autonomous AI hacker to find actual exploits in your web apps. Shannon has achieved a 96.15% success rate on the hint-free, source-aware XBOW Benchmark.",
+      "stars": 18943,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "TypeScript"
+    },
+    {
+      "title_en": "openai/skills",
+      "url": "https://github.com/openai/skills",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.170965",
+      "external_id": null,
+      "tags": [
+        "python"
+      ],
+      "content_length": 24,
+      "content_preview": "Skills Catalog for Codex",
+      "content_full": "Skills Catalog for Codex",
+      "stars": 7741,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "Python"
+    },
+    {
+      "title_en": "thedotmack/claude-mem",
+      "url": "https://github.com/thedotmack/claude-mem",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.171147",
+      "external_id": null,
+      "tags": [
+        "typescript"
+      ],
+      "content_length": 206,
+      "content_preview": "A Claude Code plugin that automatically captures everything Claude does during your coding sessions, compresses it with AI (using Claude's agent-sdk), and injects relevant context back into future sessions.",
+      "content_full": "A Claude Code plugin that automatically captures everything Claude does during your coding sessions, compresses it with AI (using Claude's agent-sdk), and injects relevant context back into future sessions.",
+      "stars": 26590,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "TypeScript"
+    },
+    {
+      "title_en": "badlogic/pi-mono",
+      "url": "https://github.com/badlogic/pi-mono",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.171327",
+      "external_id": null,
+      "tags": [
+        "typescript"
+      ],
+      "content_length": 97,
+      "content_preview": "AI agent toolkit: coding agent CLI, unified LLM API, TUI & web UI libraries, Slack bot, vLLM pods",
+      "content_full": "AI agent toolkit: coding agent CLI, unified LLM API, TUI & web UI libraries, Slack bot, vLLM pods",
+      "stars": 9704,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "TypeScript"
+    },
+    {
+      "title_en": "openclaw/openclaw",
+      "url": "https://github.com/openclaw/openclaw",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.171505",
+      "external_id": null,
+      "tags": [
+        "typescript"
+      ],
+      "content_length": 72,
+      "content_preview": "Your own personal AI assistant. Any OS. Any Platform. The lobster way. 🦞",
+      "content_full": "Your own personal AI assistant. Any OS. Any Platform. The lobster way. 🦞",
+      "stars": 181439,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "TypeScript"
+    },
+    {
+      "title_en": "disler/claude-code-hooks-mastery",
+      "url": "https://github.com/disler/claude-code-hooks-mastery",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.171642",
+      "external_id": null,
+      "tags": [
+        "python"
+      ],
+      "content_length": 24,
+      "content_preview": "Master Claude Code Hooks",
+      "content_full": "Master Claude Code Hooks",
+      "stars": 2829,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "Python"
+    },
+    {
+      "title_en": "virattt/dexter",
+      "url": "https://github.com/virattt/dexter",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.171780",
+      "external_id": null,
+      "tags": [
+        "typescript"
+      ],
+      "content_length": 47,
+      "content_preview": "An autonomous agent for deep financial research",
+      "content_full": "An autonomous agent for deep financial research",
+      "stars": 13892,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "TypeScript"
+    },
+    {
+      "title_en": "tobi/qmd",
+      "url": "https://github.com/tobi/qmd",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.171917",
+      "external_id": null,
+      "tags": [
+        "typescript"
+      ],
+      "content_length": 134,
+      "content_preview": "mini cli search engine for your docs, knowledge bases, meeting notes, whatever. Tracking current sota approaches while being all local",
+      "content_full": "mini cli search engine for your docs, knowledge bases, meeting notes, whatever. Tracking current sota approaches while being all local",
+      "stars": 7700,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "TypeScript"
+    },
+    {
+      "title_en": "OpenBMB/ChatDev",
+      "url": "https://github.com/OpenBMB/ChatDev",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.172056",
+      "external_id": null,
+      "tags": [
+        "python"
+      ],
+      "content_length": 66,
+      "content_preview": "ChatDev 2.0: Dev All through LLM-powered Multi-Agent Collaboration",
+      "content_full": "ChatDev 2.0: Dev All through LLM-powered Multi-Agent Collaboration",
+      "stars": 30721,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "Python"
+    },
+    {
+      "title_en": "karpathy/nanochat",
+      "url": "https://github.com/karpathy/nanochat",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.172195",
+      "external_id": null,
+      "tags": [
+        "python"
+      ],
+      "content_length": 35,
+      "content_preview": "The best ChatGPT that $100 can buy.",
+      "content_full": "The best ChatGPT that $100 can buy.",
+      "stars": 42799,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "Python"
+    },
+    {
+      "title_en": "github/gh-aw",
+      "url": "https://github.com/github/gh-aw",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.172334",
+      "external_id": null,
+      "tags": [
+        "go"
+      ],
+      "content_length": 24,
+      "content_preview": "GitHub Agentic Workflows",
+      "content_full": "GitHub Agentic Workflows",
+      "stars": 1117,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "Go"
+    },
+    {
+      "title_en": "ThePrimeagen/99",
+      "url": "https://github.com/ThePrimeagen/99",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.172510",
+      "external_id": null,
+      "tags": [
+        "lua"
+      ],
+      "content_length": 26,
+      "content_preview": "Neovim AI agent done right",
+      "content_full": "Neovim AI agent done right",
+      "stars": 3617,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "Lua"
+    },
+    {
+      "title_en": "gitbutlerapp/gitbutler",
+      "url": "https://github.com/gitbutlerapp/gitbutler",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.172647",
+      "external_id": null,
+      "tags": [
+        "rust"
+      ],
+      "content_length": 81,
+      "content_preview": "The GitButler version control client, backed by Git, powered by Tauri/Rust/Svelte",
+      "content_full": "The GitButler version control client, backed by Git, powered by Tauri/Rust/Svelte",
+      "stars": 18770,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "Rust"
+    },
+    {
+      "title_en": "pedramamini/Maestro",
+      "url": "https://github.com/pedramamini/Maestro",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.172785",
+      "external_id": null,
+      "tags": [
+        "typescript"
+      ],
+      "content_length": 34,
+      "content_preview": "Agent Orchestration Command Center",
+      "content_full": "Agent Orchestration Command Center",
+      "stars": 2103,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "TypeScript"
+    },
+    {
+      "title_en": "microsoft/playwright-cli",
+      "url": "https://github.com/microsoft/playwright-cli",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.172922",
+      "external_id": null,
+      "tags": [
+        "javascript"
+      ],
+      "content_length": 111,
+      "content_preview": "CLI for common Playwright actions. Record and generate Playwright code, inspect selectors and take screenshots.",
+      "content_full": "CLI for common Playwright actions. Record and generate Playwright code, inspect selectors and take screenshots.",
+      "stars": 2975,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "JavaScript"
+    },
+    {
+      "title_en": "Canner/WrenAI",
+      "url": "https://github.com/Canner/WrenAI",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.173060",
+      "external_id": null,
+      "tags": [
+        "typescript"
+      ],
+      "content_length": 177,
+      "content_preview": "⚡️ GenBI (Generative BI) queries any database in natural language, generates accurate SQL (Text-to-SQL), charts (Text-to-Chart), and AI-powered business intelligence in seconds.",
+      "content_full": "⚡️ GenBI (Generative BI) queries any database in natural language, generates accurate SQL (Text-to-SQL), charts (Text-to-Chart), and AI-powered business intelligence in seconds.",
+      "stars": 14306,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "TypeScript"
+    },
+    {
+      "title_en": "NevaMind-AI/memU",
+      "url": "https://github.com/NevaMind-AI/memU",
+      "source": "github",
+      "published_at": "2026-02-10T11:50:14.173197",
+      "external_id": null,
+      "tags": [
+        "python"
+      ],
+      "content_length": 67,
+      "content_preview": "Memory for 24/7 proactive agents like openclaw (moltbot, clawdbot).",
+      "content_full": "Memory for 24/7 proactive agents like openclaw (moltbot, clawdbot).",
+      "stars": 8733,
+      "comments": null,
+      "upvotes": null,
+      "read_time": null,
+      "language": "Python"
+    }
+  ]
+}
